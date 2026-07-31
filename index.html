@@ -2,59 +2,138 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Coffee Widget Test</title>
+<title>Which of these sound familiar?</title>
 <style>
-  body { font-family: sans-serif; background: #0f1420; color: #e5e7eb; padding: 30px; max-width: 700px; margin: auto; }
-  .card { background: #1a2030; border: 1px solid #2a3145; border-radius: 8px; padding: 16px; margin-bottom: 12px; cursor: pointer; }
+  body { font-family: sans-serif; background: #0f1420; color: #e5e7eb; padding: 30px; max-width: 800px; margin: auto; }
+  h2 { margin-bottom: 4px; }
+  p.sub { color: #9ca3af; margin-top: 0; }
+  .card { background: #1a2030; border: 1px solid #2a3145; border-radius: 8px; padding: 16px; margin-bottom: 10px; cursor: pointer; }
   .card.selected { border-color: #4ade80; }
-  button { background: #4ade80; color: #0f1420; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 16px; }
-  #status { margin-top: 16px; font-weight: bold; }
+  .results { margin-top: 30px; }
+  .result-card { background: #1a2030; border: 1px solid #2a3145; border-radius: 8px; padding: 16px; margin-bottom: 10px; }
+  .result-card.available { border-left: 4px solid #4ade80; }
+  .result-card.roadmap { border-left: 4px solid #fbbf24; }
+  .result-card h4 { margin: 0 0 4px 0; }
+  .result-card p { margin: 0 0 8px 0; color: #cbd5e1; }
+  .result-card .detail { display: none; color: #94a3b8; font-size: 0.9em; }
+  .result-card .detail.open { display: block; }
+  a.toggle { color: #4ade80; cursor: pointer; text-decoration: underline; font-size: 0.9em; }
+  #status { margin-top: 20px; font-weight: bold; }
+  .badge { font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
+  .badge.available { background: #14532d; color: #86efac; }
+  .badge.roadmap { background: #78350f; color: #fcd34d; }
 </style>
 </head>
 <body>
-<h2>Coffee Test Widget</h2>
-<p>Select whatever sounds like you — this is a test widget, not real content.</p>
+<h2>Which of these sound familiar?</h2>
+<p class="sub">Select whatever applies — this is a test widget, not real content.</p>
 
-<div class="card" data-value="bitter">My coffee always tastes bitter, no matter what I do.</div>
-<div class="card" data-value="rushed">Mornings are rushed — I need something fast, no fuss.</div>
-<div class="card" data-value="espresso">I like espresso drinks but don't own a machine.</div>
-<div class="card" data-value="cheap">I want better coffee without spending a lot.</div>
-<div class="card" data-value="process">I enjoy the process and don't mind a bit of fiddling.</div>
-
-<button onclick="submitTest()">Submit test</button>
+<div id="cards"></div>
+<div id="results" class="results"></div>
 <div id="status"></div>
 
 <script>
-let selected = [];
-document.querySelectorAll('.card').forEach(card => {
-  card.addEventListener('click', () => {
-    card.classList.toggle('selected');
-    const v = card.dataset.value;
-    selected = selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v];
-  });
-});
+// Challenge -> brew method mapping (dummy test data, same shape as real mapping)
+const challenges = [
+  { id: "bitter", label: "My coffee always tastes bitter, no matter what I do.", methods: ["french_press","cold_brew"] },
+  { id: "rushed", label: "Mornings are rushed — I need something fast, no fuss.", methods: ["pod_machine","pre_ground"] },
+  { id: "espresso", label: "I like espresso drinks but don't own a machine.", methods: ["moka_pot","aeropress"] },
+  { id: "beans", label: "I never know which beans to actually buy.", methods: ["pre_ground","subscription"] },
+  { id: "budget", label: "I want better coffee without spending a lot.", methods: ["french_press","pre_ground"] },
+  { id: "batch", label: "I usually need to make coffee for more than one person.", methods: ["batch_brewer","french_press"] },
+  { id: "travel", label: "I want good coffee even when I'm camping or travelling.", methods: ["aeropress","instant_upgrade"] },
+  { id: "fiddling", label: "I enjoy the process and don't mind a bit of fiddling.", methods: ["pourover","aeropress"] },
+  { id: "stomach", label: "Coffee sometimes upsets my stomach.", methods: ["cold_brew","low_acid_beans"] },
+  { id: "cold_brew_curious", label: "I keep meaning to try cold brew but haven't.", methods: ["cold_brew"] }
+];
 
-async function submitTest() {
+const methods = {
+  "french_press": { name: "A french press", oneLiner: "Inexpensive, simple, and full-bodied.", status: "available", detail: "Coarse-ground beans steeped in hot water, then pressed. Forgiving on technique, hard to get truly wrong." },
+  "cold_brew": { name: "Cold brew", oneLiner: "Steeped cold for 12+ hours — smoother, less acidic.", status: "available", detail: "Coarse grounds steeped in cold water overnight, then strained. Naturally lower acidity, which is why it's gentler on some stomachs." },
+  "pod_machine": { name: "A pod machine", oneLiner: "Fastest option, consistent, no skill needed.", status: "available", detail: "Pre-portioned pods, press a button, done in under a minute. Trades some flavour nuance for speed and consistency." },
+  "pre_ground": { name: "Good pre-ground coffee", oneLiner: "Skip the grinder entirely without sacrificing much quality.", status: "available", detail: "Buying whole bean and grinding fresh matters most for flavour, but a good pre-ground bag from a real roaster still beats most alternatives." },
+  "moka_pot": { name: "A moka pot", oneLiner: "Stovetop, strong, espresso-adjacent without the machine cost.", status: "available", detail: "Uses steam pressure to push water through grounds. Not true espresso, but close in strength and body for a fraction of the price." },
+  "aeropress": { name: "An AeroPress", oneLiner: "Compact, durable, travels well.", status: "available", detail: "Manual press brewer, small enough to pack, fast to clean, hard to break. Popular for camping and travel for this reason." },
+  "subscription": { name: "A bean subscription", oneLiner: "Takes the guesswork out of choosing beans.", status: "roadmap", detail: "Regular delivery of pre-selected beans matched to stated taste preferences, so you stop guessing at the shelf." },
+  "batch_brewer": { name: "A batch drip brewer", oneLiner: "Built for making several cups at once.", status: "available", detail: "Standard drip machine sized for a full pot rather than a single serving — the practical choice for households or offices." },
+  "instant_upgrade": { name: "Good instant coffee", oneLiner: "Modern specialty instant is much better than it used to be.", status: "roadmap", detail: "Freeze-dried specialty coffee has improved a lot — a legitimate option when weight and simplicity matter more than ceremony." },
+  "pourover": { name: "A pourover dripper (V60 or similar)", oneLiner: "More hands-on, but a lot of control and a genuinely different result.", status: "available", detail: "Manual pouring technique controls extraction directly. Slower and more involved, but rewards attention with a cleaner cup." },
+  "low_acid_beans": { name: "Low-acid beans", oneLiner: "Certain beans and roasts are naturally gentler on the stomach.", status: "roadmap", detail: "Darker roasts and certain origins (e.g. Sumatra) tend to be lower in acidity, which can make a real difference for sensitive stomachs." }
+};
+
+let selected = [];
+
+function renderCards() {
+  const container = document.getElementById('cards');
+  container.innerHTML = '';
+  challenges.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'card' + (selected.includes(c.id) ? ' selected' : '');
+    div.textContent = c.label;
+    div.onclick = () => {
+      selected = selected.includes(c.id) ? selected.filter(x => x !== c.id) : [...selected, c.id];
+      renderCards();
+      renderResults();
+    };
+    container.appendChild(div);
+  });
+}
+
+function renderResults() {
+  const container = document.getElementById('results');
+  container.innerHTML = '';
+  if (selected.length === 0) return;
+
+  let ids = new Set();
+  selected.forEach(cid => {
+    const ch = challenges.find(c => c.id === cid);
+    ch.methods.forEach(m => ids.add(m));
+  });
+
+  const sorted = [...ids].sort((a, b) => {
+    const aAvail = methods[a]?.status === 'available' ? 0 : 1;
+    const bAvail = methods[b]?.status === 'available' ? 0 : 1;
+    return aAvail - bAvail;
+  });
+
+  const heading = document.createElement('h3');
+  heading.textContent = 'Worth trying';
+  container.appendChild(heading);
+
+  sorted.forEach(id => {
+    const m = methods[id];
+    if (!m) return;
+    const div = document.createElement('div');
+    div.className = 'result-card ' + m.status;
+    div.innerHTML = `
+      <h4>${m.name} <span class="badge ${m.status}">${m.status === 'available' ? 'Available today' : 'Roadmap'}</span></h4>
+      <p>${m.oneLiner}</p>
+      <a class="toggle" onclick="this.nextElementSibling.classList.toggle('open')">Tell me more</a>
+      <div class="detail">${m.detail}</div>
+    `;
+    container.appendChild(div);
+  });
+
+  logSelections(selected, sorted);
+}
+
+async function logSelections(challengeIds, methodIds) {
   const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Sending...';
   try {
     const res = await fetch('https://formspree.io/f/xaqrzpag', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ selections: selected, source: 'github-pages-test' })
+      body: JSON.stringify({ challenges: challengeIds, methods: methodIds, source: 'coffee-widget-full' })
     });
-    if (res.ok) {
-      statusEl.textContent = 'Logged to Formspree ✓';
-      statusEl.style.color = '#4ade80';
-    } else {
-      statusEl.textContent = 'Formspree responded with an error: ' + res.status;
-      statusEl.style.color = '#f87171';
-    }
+    statusEl.textContent = res.ok ? 'Logged ✓' : 'Log failed: ' + res.status;
+    statusEl.style.color = res.ok ? '#4ade80' : '#f87171';
   } catch (err) {
-    statusEl.textContent = "Couldn't reach Formspree: " + err.message;
+    statusEl.textContent = "Couldn't log: " + err.message;
     statusEl.style.color = '#f87171';
   }
 }
+
+renderCards();
 </script>
 </body>
 </html>
