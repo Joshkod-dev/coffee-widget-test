@@ -27,17 +27,18 @@
 <body>
 <h2>Which of these sound familiar?</h2>
 <p class="sub">Select whatever applies — this is a test widget, not real content.</p>
- 
+
 <div id="cards"></div>
 <div id="results" class="results"></div>
 <div id="status"></div>
- 
+
 <script>
-// Note: this is basic obfuscation only (avoids automated secret-scanners), not real security.
-// Anyone who deliberately inspects this code can still reconstruct the URL.
-const _p = ["aHR0cHM6Ly9ob29rcy5zbGFjay5jb20vc2VydmljZXMv", "VDA2RUtCVjc3OUM=", "QjBCTFJMTEpWUUI=", "eG9FYTZxZUoxR0ZicTMxTXJJNDRBT2xH"];
-const SLACK_WEBHOOK_URL = _p.map(s => atob(s)).join("/");
- 
+// No secrets in this file anymore. This points at your own backend server instead —
+// the real Slack webhook lives only in Render's environment variables.
+// Replace this with your actual Render URL once deployed, e.g.:
+// const BACKEND_URL = "https://your-app.onrender.com/api/slack";
+const BACKEND_URL = "https://your-app.onrender.com/api/slack";
+
 const challenges = [
   { id: "bitter", label: "My coffee always tastes bitter, no matter what I do.", methods: ["french_press","cold_brew"] },
   { id: "rushed", label: "Mornings are rushed — I need something fast, no fuss.", methods: ["pod_machine","pre_ground"] },
@@ -50,7 +51,7 @@ const challenges = [
   { id: "stomach", label: "Coffee sometimes upsets my stomach.", methods: ["cold_brew","low_acid_beans"] },
   { id: "cold_brew_curious", label: "I keep meaning to try cold brew but haven't.", methods: ["cold_brew"] }
 ];
- 
+
 const methods = {
   "french_press": { name: "A french press", oneLiner: "Inexpensive, simple, and full-bodied.", status: "available", detail: "Coarse-ground beans steeped in hot water, then pressed. Forgiving on technique, hard to get truly wrong." },
   "cold_brew": { name: "Cold brew", oneLiner: "Steeped cold for 12+ hours — smoother, less acidic.", status: "available", detail: "Coarse grounds steeped in cold water overnight, then strained. Naturally lower acidity, which is why it's gentler on some stomachs." },
@@ -64,9 +65,9 @@ const methods = {
   "pourover": { name: "A pourover dripper (V60 or similar)", oneLiner: "More hands-on, but a lot of control and a genuinely different result.", status: "available", detail: "Manual pouring technique controls extraction directly. Slower and more involved, but rewards attention with a cleaner cup." },
   "low_acid_beans": { name: "Low-acid beans", oneLiner: "Certain beans and roasts are naturally gentler on the stomach.", status: "roadmap", detail: "Darker roasts and certain origins (e.g. Sumatra) tend to be lower in acidity, which can make a real difference for sensitive stomachs." }
 };
- 
+
 let selected = [];
- 
+
 function renderCards() {
   const container = document.getElementById('cards');
   container.innerHTML = '';
@@ -82,28 +83,28 @@ function renderCards() {
     container.appendChild(div);
   });
 }
- 
+
 function renderResults() {
   const container = document.getElementById('results');
   container.innerHTML = '';
   if (selected.length === 0) return;
- 
+
   let ids = new Set();
   selected.forEach(cid => {
     const ch = challenges.find(c => c.id === cid);
     ch.methods.forEach(m => ids.add(m));
   });
- 
+
   const sorted = [...ids].sort((a, b) => {
     const aAvail = methods[a]?.status === 'available' ? 0 : 1;
     const bAvail = methods[b]?.status === 'available' ? 0 : 1;
     return aAvail - bAvail;
   });
- 
+
   const heading = document.createElement('h3');
   heading.textContent = 'Worth trying';
   container.appendChild(heading);
- 
+
   sorted.forEach(id => {
     const m = methods[id];
     if (!m) return;
@@ -117,37 +118,36 @@ function renderResults() {
     `;
     container.appendChild(div);
   });
- 
-  logToSlack(selected, sorted);
+
+  logToBackend(selected, sorted);
 }
- 
-async function logToSlack(challengeIds, methodIds) {
+
+async function logToBackend(challengeIds, methodIds) {
   const statusEl = document.getElementById('status');
   const challengeLabels = challengeIds.map(id => challenges.find(c => c.id === id)?.label).join('\n• ');
   const methodNames = methodIds.map(id => methods[id]?.name).join(', ');
- 
-  const message = {
-    text: `*New coffee widget test submission*\n\n*Selected:*\n• ${challengeLabels}\n\n*Results shown:* ${methodNames}`
-  };
- 
+
+  const text = `*New coffee widget test submission*\n\n*Selected:*\n• ${challengeLabels}\n\n*Results shown:* ${methodNames}`;
+
   try {
-    // Slack webhooks don't send back readable CORS responses to fetch, so we use "no-cors" mode.
-    // This means we can't actually confirm success/failure from the response — just that the
-    // request was sent without a network-level error.
-    await fetch(SLACK_WEBHOOK_URL, {
+    const res = await fetch(BACKEND_URL, {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message)
+      body: JSON.stringify({ text })
     });
-    statusEl.textContent = 'Sent to Slack (check the channel to confirm)';
-    statusEl.style.color = '#4ade80';
+    if (res.ok) {
+      statusEl.textContent = 'Logged ✓';
+      statusEl.style.color = '#4ade80';
+    } else {
+      statusEl.textContent = 'Backend responded with an error: ' + res.status;
+      statusEl.style.color = '#f87171';
+    }
   } catch (err) {
-    statusEl.textContent = "Couldn't reach Slack: " + err.message;
+    statusEl.textContent = "Couldn't reach backend: " + err.message;
     statusEl.style.color = '#f87171';
   }
 }
- 
+
 renderCards();
 </script>
 </body>
